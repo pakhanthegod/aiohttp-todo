@@ -3,8 +3,9 @@ import hashlib
 from sqlalchemy import create_engine
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
 from sqlalchemy.sql import func
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, scoped_session, relationship
+from sqlalchemy.orm import sessionmaker, scoped_session, relationship, synonym
 
 db_string = 'postgres://board:root1234@localhost:5432/board'
 
@@ -46,7 +47,7 @@ class Item(Base):
     id = Column('item_id', Integer, primary_key=True)
     title = Column('item_title', String(64))
     text = Column('item_text', String(255))
-    created_at = Column('item_created', DateTime(), default=func.current_timestamp())
+    _created_at = Column('item_created', DateTime(), default=func.current_timestamp())
     created_by = Column('item_owner', Integer, ForeignKey('users.user_id'))
 
     owner = relationship('User', foreign_keys=[created_by], back_populates='items')
@@ -55,6 +56,14 @@ class Item(Base):
         self.title = title
         self.text = text
         self.created_by = created_by
+
+    @hybrid_property
+    def created_at(self):
+        return self._created_at.isoformat()
+
+    @created_at.setter
+    def created_at(self, created_at):
+        self._created_at = created_at
     
     @classmethod
     def from_json(cls, data):

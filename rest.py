@@ -6,6 +6,7 @@ from aiohttp.web import get, post, put, delete
 from aiohttp.web import Application, run_app
 from aiohttp.web import HTTPMethodNotAllowed, HTTPBadRequest
 from aiohttp.web import UrlDispatcher
+from sqlalchemy import inspect as sql_inspect
 
 from models import User, Item, session
 
@@ -26,7 +27,6 @@ class RestEndpoint:
     
     async def dispatch(self, request: Request):
         method = self.methods.get(request.method.lower())
-        print(request.method.upper(), self.methods)
         if not method:
             raise HTTPMethodNotAllowed('', DEFAULT_METHODS)
         
@@ -41,28 +41,50 @@ class RestEndpoint:
         return await method(**{arg_name: available_args[arg_name] for arg_name in wanted_args})
 
 
-class ItemsListEndpoint(RestEndpoint):
+class ItemListEndpoint(RestEndpoint):
     def __init__(self, resource):
         super().__init__()
         self.resource = resource
 
     async def get(self) -> Response:
+        data = json.dumps({
+            'items': [item.to_json() for item in session.query(Item)]
+        }).encode('utf-8')
+
         return Response(
             status=200,
-            body=json.dumps({
-                'items': [
-                    {
-                        'id': item.id,
-                        'title': item.title,
-                        'text': item.text,
-                        'created_at': item.created_at.isoformat(),
-                        'created_by': item.created_by,
-                        'owner': item.owner.id,
-                    }
-                    for item in session.query(Item)
-                ]
-            }),
+            body=data,
             content_type='application/json',
+        )
+
+    async def post(self, request) -> Response:
+        data = await request.json()
+        item = Item(data['title'], data['text'], 1)
+        session.add(item)
+        session.commit()
+        return Response(status=200)
+
+
+class ItemDetailEndpoint(RestEndpoint):
+    def __init__(self, resource):
+        super().__init__()
+        self.resource = resource
+    
+    async def get(self, pk):
+        instance = session.query(Item).filter(Item.id == pk).first()
+        if not instance:
+            return Response(
+                status=404,
+                body=json.dumps({'not found': 404}),
+                content_type='application/json'
+            )
+
+        data = json.dumps(instance.to_json()).encode('utf-8')
+
+        return Response(
+            status=200,
+            body=data,
+            content_type='application/json'
         )
 
 
@@ -71,7 +93,9 @@ class RestResource:
         self.verbose_name = verbose_name
         self.factory = factory
 
-        self.items_endpoint = ItemsListEndpoint(self)
+        self.items_endpoint = ItemListEndpoint(self)
+        self.item_detail_endpoint = ItemDetailEndpoint(self)
     
     def register(self, router: UrlDispatcher):
         router.add_route('*', '/{}'.format(self.verbose_name), self.items_endpoint.dispatch)
+        router.add_route('*', '/{}/{{pk}}'.format(self.verbose_name), self.item_detail_endpoint.dispatch)
