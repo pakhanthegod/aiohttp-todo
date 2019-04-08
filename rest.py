@@ -87,6 +87,43 @@ class ItemDetailEndpoint(RestEndpoint):
             content_type='application/json'
         )
 
+    async def put(self, request, pk):
+        instance = session.query(Item).filter(Item.id == pk).first()
+
+        if not instance:
+            return Response(
+                status=404,
+                body=json.dumps({'not found': 404}),
+                content_type='application/json'
+            )
+        
+        data = await request.json()
+
+        instance.title = data['title']
+        instance.text = data['text']
+
+        session.add(instance)
+        session.commit()
+
+        data = json.dumps(instance.to_json()).encode('utf-8')
+
+        return Response(status=201, body=data, content_type='application/json')
+
+    async def delete(self, pk):
+        instance = session.query(Item).filter(Item.id == pk).first()
+
+        if not instance:
+            return Response(
+                status=404,
+                body=json.dumps({'not found': 404}),
+                content_type='application/json'
+            )
+
+        session.delete(instance)
+        session.commit()
+
+        return Response(status=204)
+
 
 class RestResource:
     def __init__(self, verbose_name, factory):
