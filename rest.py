@@ -6,11 +6,17 @@ from aiohttp.web import get, post, put, delete
 from aiohttp.web import Application, run_app
 from aiohttp.web import HTTPMethodNotAllowed, HTTPBadRequest
 from aiohttp.web import UrlDispatcher
+from aiohttp.web import middleware
 from sqlalchemy import inspect as sql_inspect
 
 from models import User, Item, session
 
 DEFAULT_METHODS = ('GET', 'POST', 'PUT', 'DELETE')
+
+
+@middleware
+async def authenticate_middleware():
+    pass
 
 
 class RestEndpoint:
@@ -62,7 +68,14 @@ class ItemListEndpoint(RestEndpoint):
         item = Item(data['title'], data['text'], 1)
         session.add(item)
         session.commit()
-        return Response(status=200)
+
+        data = json.dumps(item.to_json()).encode('utf-8')
+
+        return Response(
+            status=201,
+            body=data,
+            content_type='application/json'
+        )
 
 
 class ItemDetailEndpoint(RestEndpoint):
@@ -107,7 +120,7 @@ class ItemDetailEndpoint(RestEndpoint):
 
         data = json.dumps(instance.to_json()).encode('utf-8')
 
-        return Response(status=201, body=data, content_type='application/json')
+        return Response(status=200, body=data, content_type='application/json')
 
     async def delete(self, pk):
         instance = session.query(Item).filter(Item.id == pk).first()
