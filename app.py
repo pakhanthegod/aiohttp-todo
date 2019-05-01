@@ -1,4 +1,5 @@
 import base64
+import json
 
 from cryptography import fernet
 from aiohttp.web import Application, run_app
@@ -15,8 +16,11 @@ from models import Item, User
 from middlewares import authenticate_middleware
 
 app = Application()
-fernet_key = fernet.Fernet.generate_key()
-secret_key = base64.urlsafe_b64decode(fernet_key)
+
+with open('config.json', encoding='utf-8') as data:
+    config = json.load(data)
+
+secret_key = base64.urlsafe_b64decode(bytes(config['secret_key'], 'utf-8'))
 
 setup(app, EncryptedCookieStorage(secret_key))
 app.middlewares.append(authenticate_middleware)

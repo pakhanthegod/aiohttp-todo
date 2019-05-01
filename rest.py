@@ -216,7 +216,9 @@ class AuthenticateEndpoint(RestEndpoint):
     async def post(self, request):
         data = await request.json()
         email = html.escape(data['email'])
-        password = html.escape(data['password'])
+        password = html.escape(data['password']).encode('utf-8')
+
+        print(password)
 
         user = session.query(self.user_factory).filter(
             self.user_factory.email == email

@@ -1,7 +1,7 @@
-import hashlib
+import bcrypt
 
 from sqlalchemy import create_engine
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Binary
 from sqlalchemy.sql import func
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.ext.declarative import declarative_base
@@ -21,7 +21,7 @@ class User(Base):
 
     id = Column('user_id', Integer, primary_key=True)
     email = Column('user_email', String(255))
-    password = Column('user_password', String(64))
+    password = Column('user_password', Binary(60))
 
     items = relationship('Item', back_populates='owner')
 
@@ -81,7 +81,7 @@ if __name__ == '__main__':
     Base.metadata.drop_all(db)
     Base.metadata.create_all(db)
 
-    user = User('test@test.ru', hashlib.sha256('qwe123'.encode(encoding='UTF-8')).hexdigest())
+    user = User('test@test.ru', bcrypt.hashpw('qwe123'.encode('utf-8'), bcrypt.gensalt()))
 
     session.add(user)
     session.commit()
