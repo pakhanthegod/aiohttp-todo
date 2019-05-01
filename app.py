@@ -25,14 +25,14 @@ item_resource = RestResource(
     'items',
     Item,
     list_endpoint=ItemListEndpoint,
-    detail_endpoint=ItemDetailEndpoint
+    detail_endpoint=ItemDetailEndpoint,
 )
 item_resource.register(app.router)
 
 auth_resource = RestResource(
     'auth',
     User,
-    common_endpoint=AuthenticateEndpoint
+    common_endpoint=AuthenticateEndpoint,
 )
 auth_resource.register(app.router)
 
