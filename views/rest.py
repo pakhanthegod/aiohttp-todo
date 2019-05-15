@@ -1,8 +1,12 @@
 import inspect
 import json
-import bcrypt
 import html
+import datetime
+import base64
 
+import jwt
+import bcrypt
+from validate_email import validate_email
 from aiohttp.web import Request, Response
 from aiohttp.web import get, post, put, delete
 from aiohttp.web import Application, run_app
@@ -10,11 +14,18 @@ from aiohttp.web import HTTPMethodNotAllowed, HTTPBadRequest
 from aiohttp.web import UrlDispatcher
 from aiohttp_session import get_session
 from sqlalchemy import inspect as sql_inspect
+from sqlalchemy.exc import IntegrityError
 
-from models import User, Item, session
+from models.models import User, Item, session
 
 
 DEFAULT_METHODS = ('GET', 'POST', 'PUT', 'DELETE')
+
+
+with open('../config.json', encoding='utf-8') as data:
+    config = json.load(data)
+
+SECRET_KEY = base64.urlsafe_b64decode(bytes(config['secret_key'], 'utf-8'))
 
 
 class RestEndpoint:
@@ -137,7 +148,7 @@ class ItemDetailEndpoint(RestEndpoint):
             if not instance:
                 return Response(
                     status=404,
-                    body=json.dumps({'not found': 404}),
+                    body=json.dumps({ 'not found': 404 }),
                     content_type='application/json'
                 )
 
@@ -162,7 +173,7 @@ class ItemDetailEndpoint(RestEndpoint):
             if not instance:
                 return Response(
                     status=404,
-                    body=json.dumps({'not found': 404}),
+                    body=json.dumps({ 'not found': 404} ),
                     content_type='application/json'
                 )
 
@@ -191,7 +202,7 @@ class ItemDetailEndpoint(RestEndpoint):
             if not instance:
                 return Response(
                     status=404,
-                    body=json.dumps({'not found': 404}),
+                    body=json.dumps({ 'not found': 404 }),
                     content_type='application/json'
                 )
 
@@ -216,9 +227,7 @@ class AuthenticateEndpoint(RestEndpoint):
     async def post(self, request):
         data = await request.json()
         email = html.escape(data['email'])
-        password = html.escape(data['password']).encode('utf-8')
-
-        print(password)
+        password = html.escape(data['password']).encode('utf-8')  # Encode for bcrypt
 
         user = session.query(self.user_factory).filter(
             self.user_factory.email == email
@@ -226,16 +235,59 @@ class AuthenticateEndpoint(RestEndpoint):
         hashed_password = user.password or None
 
         if hashed_password and bcrypt.hashpw(password, hashed_password) == hashed_password:
-            http_session = await get_session(request)
-            http_session['user_id'] = user.id
+            payload = {
+                'user_id': user.id,
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=48)
+            }
+            token = jwt.encode(payload, SECRET_KEY, algorithm='HS256').decode('utf-8')
 
-            return Response(status=200)
+            response = Response(status=200)
+            response.set_cookie('JWT_Token', token, httponly=True, secure=False)  # Secure is false, because Postman doesn't support it
+
+            return response
         else:
-            data = json.dumps(
-                { 'error': 'Bad Authentication data' }
-            ).encode('utf-8')
+            data = json.dumps({ 'error': 'Bad Authentication data' })
 
             return Response(status=404, body=data, content_type='application/json')
+
+
+class RegisterEndpoint(RestEndpoint):
+    """
+    Register new users.
+
+    POST: register a new user.
+    """
+    def __init__(self, resource):
+        super().__init__()
+        self.user_factory = resource.factory
+
+    async def post(self, request):
+        data = await request.json()
+        email = html.escape(data['email'])
+        password = html.escape(data['password']).encode('utf-8')  # Encode for bcrypt
+        password1 = html.escape(data['password1']).encode('utf-8')
+
+        if validate_email(email):
+            if password == password1:
+                try:
+                    hashed_password = bcrypt.hashpw(password, bcrypt.gensalt())
+                    new_user = User(email=email, password=hashed_password)
+                    session.add(new_user)
+                    session.commit()
+                    return Response(status=201)
+                except IntegrityError:
+                    session.rollback()
+                    data = { 'error': 'Email is not unique' }
+                    body = json.dumps(data)
+                    return Response(status=403, body=body, content_type='application/json')
+            else:
+                data = { 'error': 'Passwords are not equal' }
+                body = json.dumps(data)
+                return Response(status=403, body=body, content_type='application/json')
+        else:
+            data = { 'error': 'Email is not correct' }
+            body = json.dumps(data)
+            return Response(status=403, body=body, content_type='application/json')
 
 
 class RestResource:
@@ -244,33 +296,17 @@ class RestResource:
     """
     def __init__(
         self,
-        verbose_name,
+        url,
         factory,
-        list_endpoint=None,
-        detail_endpoint=None,
-        common_endpoint=None
+        endpoint
     ):
         """
-        versbose_name is used for create a path,
-        factory is used for provide a factory of object to an endpoint
+        `url` is used for create a path,
+        `factory` is used for provide a factory of object to an endpoint
         """
-        self.verbose_name = verbose_name
         self.factory = factory
-
-        if list_endpoint:
-            self.list_endpoint = list_endpoint(self)
-        if detail_endpoint:
-            self.detail_endpoint = detail_endpoint(self)
-        if common_endpoint:
-            self.common_endpoint = common_endpoint(self)
+        self.url = url
+        self.endpoint = endpoint(self)
 
     def register(self, router: UrlDispatcher):
-        if hasattr(self, 'list_endpoint'):
-            router.add_route('*', '/{}'.format(self.verbose_name),
-                             self.list_endpoint.dispatch)
-        if hasattr(self, 'detail_endpoint'):
-            router.add_route(
-                '*', '/{}/{{pk}}'.format(self.verbose_name), self.detail_endpoint.dispatch)
-        if hasattr(self, 'common_endpoint'):
-            router.add_route('*', '/{}'.format(self.verbose_name),
-                             self.common_endpoint.dispatch)
+        router.add_route('*', self.url, self.endpoint.dispatch)

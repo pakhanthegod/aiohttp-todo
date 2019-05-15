@@ -7,7 +7,7 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session, relationship, synonym
 
-db_string = 'postgres://board:root1234@localhost:5432/board'
+db_string = 'postgres://aiotodo:aiotodo@localhost:5433/todo'
 
 db = create_engine(db_string)
 session_factory = sessionmaker(bind=db)
@@ -20,7 +20,7 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column('user_id', Integer, primary_key=True)
-    email = Column('user_email', String(255))
+    email = Column('user_email', String(255), unique=True)
     password = Column('user_password', Binary(60))
 
     items = relationship('Item', back_populates='owner')
