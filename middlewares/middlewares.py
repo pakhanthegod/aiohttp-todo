@@ -1,14 +1,15 @@
 import json
 import base64
+import os
 
 from aiohttp import web
 from aiohttp_session import get_session
 import jwt
 
-from models import User, session
+from models.models import User, session
 
 
-with open('../config.json', encoding='utf-8') as data:
+with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json'), encoding='utf-8') as data:
     config = json.load(data)
 
 SECRET_KEY = base64.urlsafe_b64decode(bytes(config['secret_key'], 'utf-8'))

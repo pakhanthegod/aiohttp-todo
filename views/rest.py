@@ -3,6 +3,7 @@ import json
 import html
 import datetime
 import base64
+import os
 
 import jwt
 import bcrypt
@@ -22,7 +23,7 @@ from models.models import User, Item, session
 DEFAULT_METHODS = ('GET', 'POST', 'PUT', 'DELETE')
 
 
-with open('../config.json', encoding='utf-8') as data:
+with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json'), encoding='utf-8') as data:
     config = json.load(data)
 
 SECRET_KEY = base64.urlsafe_b64decode(bytes(config['secret_key'], 'utf-8'))

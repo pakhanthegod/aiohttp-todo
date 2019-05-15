@@ -13,7 +13,7 @@ from views.rest import (
     AuthenticateEndpoint,
     RegisterEndpoint
 )
-from models.models import Item, User
+from models.models import User, Item
 from middlewares.middlewares import authenticate_middleware
 
 app = Application()
