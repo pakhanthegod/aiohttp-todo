@@ -30,28 +30,33 @@ items_list_resource = RestResource(
     '/items',
     Item,
     ItemListEndpoint,
+    app,
 )
-items_list_resource.register(app.router)
+items_list_resource.register()
 
 item_detail_resource = RestResource(
     '/items/{pk}',
     Item,
     ItemDetailEndpoint,
+    app,
 )
+item_detail_resource.register()
 
 auth_resource = RestResource(
     '/auth',
     User,
     AuthenticateEndpoint,
+    app,
 )
-auth_resource.register(app.router)
+auth_resource.register()
 
 register_resource = RestResource(
     '/register',
     User,
     RegisterEndpoint,
+    app,
 )
-register_resource.register(app.router)
+register_resource.register()
 
 if __name__ == '__main__':
     run_app(app, host='localhost', port=8000)

@@ -7,6 +7,7 @@ import os
 
 import jwt
 import bcrypt
+import aiohttp_cors
 from validate_email import validate_email
 from aiohttp.web import Request, Response
 from aiohttp.web import get, post, put, delete
@@ -229,27 +230,32 @@ class AuthenticateEndpoint(RestEndpoint):
         data = await request.json()
         email = html.escape(data['email'])
         password = html.escape(data['password']).encode('utf-8')  # Encode for bcrypt
-
+        print(email, password)
         user = session.query(self.user_factory).filter(
             self.user_factory.email == email
         ).first()
-        hashed_password = user.password or None
+        if user:
+            hashed_password = user.password
+        else:
+            data = json.dumps({ 'msg': 'Bad authentication data' })
 
-        if hashed_password and bcrypt.hashpw(password, hashed_password) == hashed_password:
+            return Response(status=400, body=data, content_type='application/json')
+
+        if bcrypt.hashpw(password, hashed_password) == hashed_password:
             payload = {
                 'user_id': user.id,
                 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=48)
             }
             token = jwt.encode(payload, SECRET_KEY, algorithm='HS256').decode('utf-8')
-
-            response = Response(status=200)
+            data = json.dumps({ 'msg': 'Authenticated' })
+            response = Response(status=200, body=data, content_type='application/json')
             response.set_cookie('JWT_Token', token, httponly=True, secure=False)  # Secure is false, because Postman doesn't support it
 
             return response
         else:
-            data = json.dumps({ 'error': 'Bad Authentication data' })
+            data = json.dumps({ 'msg': 'Bad authentication ata' })
 
-            return Response(status=404, body=data, content_type='application/json')
+            return Response(status=400, body=data, content_type='application/json')
 
 
 class RegisterEndpoint(RestEndpoint):
@@ -280,15 +286,15 @@ class RegisterEndpoint(RestEndpoint):
                     session.rollback()
                     data = { 'error': 'Email is not unique' }
                     body = json.dumps(data)
-                    return Response(status=403, body=body, content_type='application/json')
+                    return Response(status=400, body=body, content_type='application/json')
             else:
                 data = { 'error': 'Passwords are not equal' }
                 body = json.dumps(data)
-                return Response(status=403, body=body, content_type='application/json')
+                return Response(status=400, body=body, content_type='application/json')
         else:
             data = { 'error': 'Email is not correct' }
             body = json.dumps(data)
-            return Response(status=403, body=body, content_type='application/json')
+            return Response(status=400, body=body, content_type='application/json')
 
 
 class RestResource:
@@ -299,7 +305,8 @@ class RestResource:
         self,
         url,
         factory,
-        endpoint
+        endpoint,
+        app,
     ):
         """
         `url` is used for create a path,
@@ -308,6 +315,21 @@ class RestResource:
         self.factory = factory
         self.url = url
         self.endpoint = endpoint(self)
+        self.app = app
+        # CORS settings
+        self.cors = aiohttp_cors.setup(app, defaults={
+            '*': aiohttp_cors.ResourceOptions(
+                expose_headers='*',
+                allow_headers='*',
+                allow_methods='*',
+                allow_credentials=True,
+            )
+        })
 
-    def register(self, router: UrlDispatcher):
-        router.add_route('*', self.url, self.endpoint.dispatch)
+
+    def register(self):
+        """
+        Register a URL to handler.
+        """
+        resource = self.cors.add(self.app.router.add_resource(self.url))
+        self.cors.add(resource.add_route('*', self.endpoint.dispatch))
